@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PREMAZON - Dashboard Rumo ao Topo</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --sidebar-width: 270px;
+            --pbi-blue-dark: #0f1e2d;
+            --pbi-blue-light: #1e88e5;
+            --pbi-bg-light: #f8f9fa;
+            --pbi-card-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        [data-bs-theme="dark"] {
+            --pbi-bg-light: #0d1117;
+            --pbi-blue-dark: #161b22;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--pbi-bg-light);
+            overflow-x: hidden;
+        }
+
+        #sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 100;
+            transition: all 0.25s ease;
+            background-color: var(--pbi-blue-dark);
+            border-right: 1px solid rgba(255,255,255,0.05);
+        }
+
+        #sidebar.collapsed {
+            margin-left: calc(-1 * var(--sidebar-width));
+        }
+
+        #main-content {
+            margin-left: var(--sidebar-width);
+            transition: all 0.25s ease;
+            min-height: 100vh;
+        }
+
+        #main-content.expanded {
+            margin-left: 0;
+        }
+
+        .nav-link {
+            color: #8b9bb4;
+            padding: 0.85rem 1.5rem;
+            border-left: 4px solid transparent;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            background: transparent;
+            border-top: none;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: #ffffff !important;
+            background-color: rgba(255,255,255,0.06);
+            border-left-color: var(--pbi-blue-light);
+        }
+
+        .kpi-card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: var(--pbi-card-shadow);
+            background-color: var(--bs-body-bg);
+            padding: 1.25rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 280px;
+            width: 100%;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.85);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        [data-bs-theme="dark"] .loading-overlay {
+            background: rgba(13,17,23,0.85);
+        }
+
+        /* CONFIGURAÇÃO EXCLUSIVA PARA EXPORTAÇÃO / IMPRESSÃO EM PDF */
+        @media print {
+            #sidebar, #sidebarToggle, #themeToggle, .navbar, .btn-export-ignore, .nav-tabs {
+                display: none !important;
+            }
+            #main-content {
+                margin-left: 0 !important;
+                padding: 0 !important;
+            }
+            .tab-pane {
+                display: none !important;
+            }
+            #pane-exportar {
+                display: block !important;
+                opacity: 1 !important;
+            }
+            .tab-content-export .tab-pane {
+                display: block !important;
+                opacity: 1 !important;
+                margin-bottom: 2rem;
+                break-after: page; /* Força uma quebra de página no PDF para cada relatório */
+            }
+            .card {
+                border: 1px solid #ccc !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading-overlay d-none">
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status" style="width: 3.5rem; height: 3.5rem;"></div>
+            <h5 class="mt-3 fw-bold">Processando Planilha PREMAZON...</h5>
+            <p class="text-muted small">Recalculando bônus para R$ 100,00 e atualizando indicadores.</p>
+        </div>
+    </div>
+
+    <!-- Sidebar Menu -->
+    <nav id="sidebar" class="text-white">
+        <div class="p-3 border-bottom border-secondary border-opacity-25 text-center">
+            <h4 class="mb-0 fw-bold text-truncate text-white"><i class="fa-solid fa-crown text-warning me-2"></i>PREMAZON</h4>
+            <small class="text-muted text-uppercase tracking-wider fs-7">Rumo Ao Topo v3.2</small>
+        </div>
+        <div class="nav flex-column mt-3 nav-pills" id="v-pills-tab" role="tablist">
+            <button class="nav-link active" id="tab-executivo" data-bs-toggle="pill" data-bs-target="#pane-executivo" type="button"><i class="fa-solid fa-chart-line"></i> Dashboard Executivo</button>
+            <button class="nav-link" id="tab-base" data-bs-toggle="pill" data-bs-target="#pane-base" type="button"><i class="fa-solid fa-table"></i> Base Geral da Planilha</button>
+            <button class="nav-link" id="tab-bonus" data-bs-toggle="pill" data-bs-target="#pane-bonus" type="button"><i class="fa-solid fa-circle-check text-success"></i> Aba Bônus (SIM)</button>
+            <button class="nav-link" id="tab-faltas" data-bs-toggle="pill" data-bs-target="#pane-faltas" type="button"><i class="fa-solid fa-calendar-minus text-danger"></i> Aba Faltas</button>
+            <button class="nav-link" id="tab-atrasos" data-bs-toggle="pill" data-bs-target="#pane-atrasos" type="button"><i class="fa-solid fa-business-time text-warning"></i> Aba Atrasos</button>
+            <button class="nav-link" id="tab-atestados" data-bs-toggle="pill" data-bs-target="#pane-atestados" type="button"><i class="fa-solid fa-file-waveform text-info"></i> Aba Atestados</button>
+            <button class="nav-link" id="tab-setor" data-bs-toggle="pill" data-bs-target="#pane-setor" type="button"><i class="fa-solid fa-building-user"></i> Visão por Setor</button>
+            <hr class="mx-3 opacity-25">
+            <button class="nav-link text-warning" id="tab-exportar" data-bs-toggle="pill" data-bs-target="#pane-exportar" type="button"><i class="fa-solid fa-file-pdf"></i> Exportar p/ Diretoria</button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div id="main-content">
+        <!-- Top Navbar Header -->
+        <header class="navbar navbar-expand bg-body border-bottom px-4 py-2 sticky-top shadow-sm">
+            <button class="btn btn-outline-secondary btn-sm me-3" id="sidebarToggle">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            
+            <!-- Global Interactive Filter Panel -->
+            <div class="row g-2 align-items-center w-100 me-2">
+                <div class="col-md-4">
+                    <select id="filtro-setor" class="form-select form-select-sm filter-input"><option value="">[Filtrar Setor: Todos]</option></select>
+                </div>
+                <div class="col-md-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-primary text-white border-primary"><i class="fa-solid fa-file-excel me-1"></i> Carregar Planilha</span>
+                        <input type="file" id="excel-file" class="form-control border-primary" accept=".xlsx, .xls, .csv">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-outline-secondary btn-sm" id="themeToggle">
+                <i class="fa-solid fa-moon"></i>
+            </button>
+        </header>
+
+        <main class="p-4 tab-content" id="v-pills-tabContent">
+            
+            <!-- 1. DASHBOARD EXECUTIVO -->
+            <div class="tab-pane fade show active" id="pane-executivo">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3 class="mb-0 text-primary fw-bold">Dashboard Executivo | Projeto Rumo ao Topo</h3>
+                    <span class="badge bg-secondary p-2" id="last-updated-badge">Aguardando importação</span>
+                </div>
+                
+                <!-- Cards de KPI Principais -->
+                <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-xl-4 mb-4">
+                    <div class="col">
+                        <div class="card kpi-card border-start border-primary border-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div><small class="text-muted text-uppercase fw-bold">Total Colaboradores</small><h3 class="mb-0 mt-1 kpi-val-ativos">0</h3></div>
+                                <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary"><i class="fa-solid fa-users fa-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card kpi-card border-start border-success border-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div><small class="text-muted text-uppercase fw-bold">Aptos Bônus (SIM)</small><h3 class="mb-0 mt-1 text-success kpi-val-com-bonus">0</h3></div>
+                                <div class="bg-success bg-opacity-10 p-3 rounded-circle text-success"><i class="fa-solid fa-circle-check fa-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card kpi-card border-start border-danger border-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div><small class="text-muted text-uppercase fw-bold">Férias (Perdem Direito)</small><h3 class="mb-0 mt-1 text-danger kpi-val-ferias">0</h3></div>
+                                <div class="bg-danger bg-opacity-10 p-3 rounded-circle text-danger"><i class="fa-solid fa-umbrella-beach fa-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card kpi-card border-start border-warning border-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div><small class="text-muted text-uppercase fw-bold">Valor Total Pago</small><h3 class="mb-0 mt-1 text-warning kpi-val-total-pago">R$ 0,00</h3></div>
+                                <div class="bg-warning bg-opacity-10 p-3 rounded-circle text-warning"><i class="fa-solid fa-sack-dollar fa-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cards Secundários com Ocorrências -->
+                <div class="row g-3 row-cols-1 row-cols-sm-3 mb-4">
+                    <div class="col">
+                        <div class="card kpi-card text-center border-bottom border-danger border-3">
+                            <small class="text-muted text-uppercase fw-bold">Total Geral de Faltas</small>
+                            <h2 class="mb-0 text-danger mt-1 fw-bold kpi-val-tot-faltas">0</h2>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card kpi-card text-center border-bottom border-warning border-3">
+                            <small class="text-muted text-uppercase fw-bold">Total Geral de Atrasos</small>
+                            <h2 class="mb-0 text-warning mt-1 fw-bold kpi-val-tot-atrasos">0</h2>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card kpi-card text-center border-bottom border-info border-3">
+                            <small class="text-muted text-uppercase fw-bold">Total Geral de Atestados</small>
+                            <h2 class="mb-0 text-info mt-1 fw-bold kpi-val-tot-atestados">0</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráficos Gerenciais -->
+                <div class="row g-3">
+                    <div class="col-lg-5">
+                        <div class="card p-3 bg-body shadow-sm h-100">
+                            <h6 class="fw-bold"><i class="fa-solid fa-chart-pie text-primary me-2"></i>Status de Elegibilidade ao Bônus</h6>
+                            <div class="chart-container mt-3"><canvas id="chartElegibilidade"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-7">
+                        <div class="card p-3 bg-body shadow-sm h-100">
+                            <h6 class="fw-bold"><i class="fa-solid fa-chart-bar text-primary me-2"></i>Ocorrências por Setor (Faltas e Atrasos)</h6>
+                            <div class="chart-container mt-3"><canvas id="chartSetoresOcorrencias"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. BASE GERAL DA PLANILHA -->
+            <div class="tab-pane fade" id="pane-base">
+                <div class="card p-3 bg-body shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h4 class="mb-0 text-primary fw-bold"><i class="fa-solid fa-database me-2"></i>Layout Original Expandido</h4>
+                            <small class="text-muted">Visualização exata da planilha importada com recálculo fixado em R$ 100,00</small>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="table-geral" class="table table-striped table-hover align-middle w-100 text-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Colaborador</th><th>Setor</th><th>Equipe</th><th>Função</th><th>Bônus Orig.</th><th>Bônus Recalc.</th><th>Valor Premiação</th><th>Faltas</th><th>Atrasos</th><th>Atestados</th><th>Férias</th><th>DDS</th><th>OBS</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. ABA BÔNUS -->
+            <div class="tab-pane fade" id="pane-bonus">
+                <div class="card p-3 bg-body shadow-sm">
+                    <h4 class="text-success fw-bold mb-3"><i class="fa-solid fa-circle-check me-2"></i>Aba Bônus (Status Recalculado: SIM)</h4>
+                    <p class="text-muted small">Apenas colaboradores aptos a receber a premiação de <strong>R$ 100,00</strong>.</p>
+                    <div class="table-responsive">
+                        <table id="table-bonus-sim" class="table table-striped table-hover w-100">
+                            <thead class="table-success">
+                                <tr><th>Colaborador</th><th>Setor</th><th>Equipe</th><th>Função</th><th>DDS</th><th>Valor Pago</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. ABA FALTAS -->
+            <div class="tab-pane fade" id="pane-faltas">
+                <div class="card p-3 bg-body shadow-sm">
+                    <h4 class="text-danger fw-bold mb-3"><i class="fa-solid fa-calendar-minus me-2"></i>Aba de Controle de Faltas</h4>
+                    <table id="table-faltas-aba" class="table table-striped table-hover w-100">
+                        <thead class="table-danger">
+                            <tr><th>Colaborador</th><th>Setor</th><th>Equipe</th><th>Função</th><th>Quantidade de Faltas</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 5. ABA ATRASOS -->
+            <div class="tab-pane fade" id="pane-atrasos">
+                <div class="card p-3 bg-body shadow-sm">
+                    <h4 class="text-warning fw-bold mb-3"><i class="fa-solid fa-business-time me-2"></i>Aba de Controle de Atrasos</h4>
+                    <table id="table-atrasos-aba" class="table table-striped table-hover w-100">
+                        <thead class="table-warning">
+                            <tr><th>Colaborador</th><th>Setor</th><th>Equipe</th><th>Função</th><th>Registro de Atrace</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 6. ABA ATESTADOS -->
+            <div class="tab-pane fade" id="pane-atestados">
+                <div class="card p-3 bg-body shadow-sm">
+                    <h4 class="text-info fw-bold mb-3"><i class="fa-solid fa-file-waveform me-2"></i>Aba de Controle de Atestados</h4>
+                    <table id="table-atestados-aba" class="table table-striped table-hover w-100">
+                        <thead class="table-info">
+                            <tr><th>Colaborador</th><th>Setor</th><th>Equipe</th><th>Função</th><th>Registro de Atestado</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 7. VISÃO POR SETOR -->
+            <div class="tab-pane fade" id="pane-setor">
+                <div class="card p-3 bg-body shadow-sm">
+                    <h4 class="text-dark fw-bold mb-3"><i class="fa-solid fa-building me-2"></i>Filtro e Visão Gerencial por Setor</h4>
+                    <div class="mb-4 col-md-4">
+                        <label class="form-label fw-bold">Selecione o Setor para Detalhamento:</label>
+                        <select id="setor-detalhe-select" class="form-select"></select>
+                    </div>
+                    <div class="row g-3" id="setor-detalhes-cards"></div>
+                </div>
+            </div>
+
+            <!-- 8. CENTRAL DE EXPORTAÇÃO COMPLETA PARA DIRETORIA -->
+            <div class="tab-pane fade" id="pane-exportar">
+                <div class="d-flex justify-content-between align-items-center mb-3 btn-export-ignore">
+                    <div>
+                        <h3 class="mb-0 text-warning fw-bold"><i class="fa-solid fa-file-export me-2"></i>Central de Exportação Executiva</h3>
+                        <p class="text-muted small mb-0">Selecione o relatório desejado abaixo para visualizar e gerar o PDF limpo para a Diretoria.</p>
+                    </div>
+                    <button class="btn btn-warning fw-bold px-4 shadow-sm" onclick="window.print()">
+                        <i class="fa-solid fa-print me-2"></i>Imprimir / Salvar PDF
+                    </button>
+                </div>
+
+                <!-- Sub-Abas Interativas na tela (sumirão no Print, imprimindo tudo em sequência organizada) -->
+                <ul class="nav nav-tabs mb-4 btn-export-ignore" id="exportTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="exp-geral-tab" data-bs-toggle="tab" data-bs-target="#exp-geral" type="button"><i class="fa-solid fa-chart-pie me-2"></i>1. Visão Geral Financeira</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link text-danger" id="exp-faltas-tab" data-bs-toggle="tab" data-bs-target="#exp-faltas" type="button"><i class="fa-solid fa-calendar-xmark me-2"></i>2. Relatório de Faltas</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link text-info" id="exp-atestados-tab" data-bs-toggle="tab" data-bs-target="#exp-atestados" type="button"><i class="fa-solid fa-notes-medical me-2"></i>3. Relatório de Atestados</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content tab-content-export" id="exportTabsContent">
+                    
+                    <!-- SUB-ABA 1: VISÃO GERAL FINANCEIRA -->
+                    <div class="tab-pane fade show active bg-white text-dark p-4 rounded border shadow-sm" id="exp-geral">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                            <div>
+                                <h2 class="fw-bold text-dark mb-0">PREMAZON - Relatório de Premiações</h2>
+                                <span class="text-muted uppercase fw-bold small">Projeto Rumo ao Topo • Premiação Fixada em R$ 100,00</span>
+                            </div>
+                            <span class="badge bg-dark p-2">CONFIDENCIAL DIRETORIA</span>
+                        </div>
+
+                        <div class="row text-center g-2 mb-4">
+                            <div class="col-3"><div class="p-3 border rounded bg-light"><small class="text-muted fw-bold d-block">Colaboradores</small><span class="fs-4 fw-bold kpi-val-ativos">0</span></div></div>
+                            <div class="col-3"><div class="p-3 border rounded bg-light"><small class="text-muted fw-bold d-block">Aptos Bônus</small><span class="fs-4 fw-bold kpi-val-com-bonus text-success">0</span></div></div>
+                            <div class="col-3"><div class="p-3 border rounded bg-light"><small class="text-muted fw-bold d-block">Em Férias</small><span class="fs-4 fw-bold kpi-val-ferias text-info">0</span></div></div>
+                            <div class="col-3"><div class="p-3 border rounded bg-light"><small class="text-muted fw-bold d-block">Orçamento Total</small><span class="fs-4 fw-bold kpi-val-total-pago text-primary">R$ 0,00</span></div></div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-5">
+                                <div class="border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-center border-bottom pb-2">Distribuição de Elegibilidade</h6>
+                                    <div style="height: 230px; position: relative;"><canvas id="chartElegibilidadeExport"></canvas></div>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-center border-bottom pb-2">Ocorrências Consolidadas por Setor</h6>
+                                    <div style="height: 230px; position: relative;"><canvas id="chartSetoresOcorrenciasExport"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUB-ABA 2: RELATÓRIO DE FALTAS -->
+                    <div class="tab-pane fade bg-white text-dark p-4 rounded border shadow-sm" id="exp-faltas">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                            <div>
+                                <h2 class="fw-bold text-danger mb-0"><i class="fa-solid fa-calendar-xmark me-2"></i>Relatório Gerencial de Faltas</h2>
+                                <span class="text-muted uppercase fw-bold small">Auditoria de Impacto Operacional e Assiduidade</span>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted d-block">Total de Faltas no Filtro</small>
+                                <h4 class="fw-bold text-danger mb-0 kpi-val-tot-faltas">0</h4>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-center border-bottom pb-2 text-danger">Ranking de Faltas por Setor</h6>
+                                    <div style="height: 250px; position: relative;"><canvas id="chartFaltasSetorExport"></canvas></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-center border-bottom pb-2 text-danger">Top Colaboradores Ausentes</h6>
+                                    <div style="height: 250px; position: relative;"><canvas id="chartFaltasTopColabExport"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUB-ABA 3: RELATÓRIO DE ATESTADOS -->
+                    <div class="tab-pane fade bg-white text-dark p-4 rounded border shadow-sm" id="exp-atestados">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                            <div>
+                                <h2 class="fw-bold text-info mb-0"><i class="fa-solid fa-notes-medical me-2"></i>Relatório Gerencial de Atestados</h2>
+                                <span class="text-muted uppercase fw-bold small">Mapeamento de Afastamentos Médicos por Setor</span>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted d-block">Total Atestados Registrados</small>
+                                <h4 class="fw-bold text-info mb-0 kpi-val-tot-atestados">0</h4>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-12">
+                                <div class="border rounded p-3">
+                                    <h6 class="fw-bold text-center border-bottom pb-2 text-info">Atestados Médicos por Setor</h6>
+                                    <div style="height: 260px; position: relative;"><canvas id="chartAtestadosSetorExport"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Bibliotecas Obrigatórias -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        let globalData = [];
+        let tables = {};
+        let charts = {};
+
+        document.getElementById('sidebarToggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+            document.getElementById('main-content').classList.toggle('expanded');
+        });
+
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+            document.getElementById('themeToggle').innerHTML = newTheme === 'dark' ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>';
+        });
+
+        document.getElementById('excel-file').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('loading').classList.remove('d-none');
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                parsePremazonSheet(rows);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function parsePremazonSheet(rows) {
+            globalData = [];
+            let headerIdx = -1;
+
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].includes("Colaborador")) {
+                    headerIdx = i;
+                    break;
+                }
+            }
+
+            if (headerIdx === -1) {
+                alert("Erro: Não foi encontrada a coluna 'Colaborador'.");
+                document.getElementById('loading').classList.add('d-none');
+                return;
+            }
+
+            const headers = rows[headerIdx].map(h => String(h).trim());
+
+            for (let j = headerIdx + 1; j < rows.length; j++) {
+                let r = rows[j];
+                if (!r || r.length === 0 || !r[2]) continue;
+
+                let item = {};
+                headers.forEach((head, index) => {
+                    item[head] = r[index] !== undefined ? String(r[index]).trim() : "";
+                });
+
+                item.Colaborador = item["Colaborador"] || "";
+                item.Setor = item["Setor"] || "N/A";
+                item.Equipe = item["Equipe"] || "N/A";
+                item.Funcao = item["Função"] || "N/A";
+                item.BonusOriginal = item["Bonus"] || "";
+                
+                item.IsFerias = (String(item["Férias"]).toUpperCase() === "FÉRIAS" || String(item["BonusOriginal"]).toUpperCase() === "FÉRIAS");
+                
+                if (item.IsFerias) {
+                    item.BonusRecalculated = "FÉRIAS";
+                    item.ValorBonus = 0;
+                } else if (String(item["BonusOriginal"]).toUpperCase() === "SIM") {
+                    item.BonusRecalculated = "SIM";
+                    item.ValorBonus = 100.00; 
+                } else {
+                    item.BonusRecalculated = "NÃO";
+                    item.ValorBonus = 0;
+                }
+
+                item.FaltasNum = isNaN(parseInt(item["Falta"])) ? 0 : parseInt(item["Falta"]);
+                item.AtrasosNum = (item["Atraso "] && item["Atraso "] !== "" && item["Atraso "] !== "0") ? 1 : 0;
+                item.AtestadosNum = (item["Atestado"] && item["Atestado"] !== "" && item["Atestado"] !== "0") ? 1 : 0;
+
+                if (item.Colaborador.toUpperCase() !== "INSS" && item.Colaborador.toUpperCase() !== "PACATUBA") {
+                    globalData.push(item);
+                }
+            }
+
+            localStorage.setItem('premazon_v3_cache', JSON.stringify(globalData));
+            initFiltersAndViews();
+            document.getElementById('loading').classList.add('d-none');
+            document.getElementById('last-updated-badge').innerText = "Premiação fixada em R$ 100,00";
+        }
+
+        function initFiltersAndViews() {
+            const setores = [...new Set(globalData.map(d => d.Setor).filter(Boolean))];
+            const fSetor = document.getElementById('filtro-setor');
+            const dSetor = document.getElementById('setor-detalhe-select');
+            
+            fSetor.innerHTML = '<option value="">[Filtrar Setor: Todos]</option>';
+            dSetor.innerHTML = '';
+
+            setores.forEach(s => {
+                fSetor.innerHTML += `<option value="${s}">${s}</option>`;
+                dSetor.innerHTML += `<option value="${s}">${s}</option>`;
+            });
+
+            applyFilteringAndMetrics();
+        }
+
+        document.getElementById('filtro-setor').addEventListener('change', applyFilteringAndMetrics);
+        document.getElementById('setor-detalhe-select').addEventListener('change', updateSetorDetailView);
+
+        function applyFilteringAndMetrics() {
+            const selectedSetor = document.getElementById('filtro-setor').value;
+
+            let filtered = globalData.filter(d => {
+                if (selectedSetor && d.Setor !== selectedSetor) return false;
+                return true;
+            });
+
+            const totalAtivos = filtered.length;
+            const comBonus = filtered.filter(d => d.BonusRecalculated === "SIM").length;
+            const emFerias = filtered.filter(d => d.IsFerias).length;
+            
+            const totalFaltas = filtered.reduce((acc, c) => acc + c.FaltasNum, 0);
+            const totalAtrasos = filtered.reduce((acc, c) => acc + c.AtrasosNum, 0);
+            const totalAtestados = filtered.reduce((acc, c) => acc + c.AtestadosNum, 0);
+            const totalFinanceiro = filtered.reduce((acc, c) => acc + c.ValorBonus, 0);
+
+            document.querySelectorAll('.kpi-val-ativos').forEach(el => el.innerText = totalAtivos);
+            document.querySelectorAll('.kpi-val-com-bonus').forEach(el => el.innerText = comBonus);
+            document.querySelectorAll('.kpi-val-ferias').forEach(el => el.innerText = emFerias);
+            document.querySelectorAll('.kpi-val-total-pago').forEach(el => el.innerText = totalFinanceiro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+            document.querySelectorAll('.kpi-val-tot-faltas').forEach(el => el.innerText = totalFaltas);
+            document.querySelectorAll('.kpi-val-tot-atrasos').forEach(el => el.innerText = totalAtrasos);
+            document.querySelectorAll('.kpi-val-tot-atestados').forEach(el => el.innerText = totalAtestados);
+
+            renderTables(filtered);
+            renderCharts(filtered, comBonus, emFerias, totalAtivos);
+            updateSetorDetailView();
+        }
+
+        function renderTables(data) {
+            Object.keys(tables).forEach(k => { if(tables[k]) tables[k].destroy(); });
+
+            let tbodyGeral = document.querySelector('#table-geral tbody');
+            tbodyGeral.innerHTML = '';
+            data.forEach(d => {
+                let badge = d.BonusRecalculated === "SIM" ? '<span class="badge bg-success">SIM</span>' : (d.IsFerias ? '<span class="badge bg-info">FÉRIAS</span>' : '<span class="badge bg-danger">NÃO</span>');
+                tbodyGeral.innerHTML += `<tr>
+                    <td><strong>${d.Colaborador}</strong></td><td>${d.Setor}</td><td>${d.Equipe}</td><td>${d.Funcao}</td>
+                    <td>${d.BonusOriginal}</td><td>${badge}</td><td><strong>R$ ${d.ValorBonus.toFixed(2)}</strong></td><td>${d.FaltasNum}</td><td>${d["Atraso "] || '-'}</td><td>${d["Atestado"] || '-'}</td><td>${d["Férias"] || '-'}</td><td>${d["DDS"] || '-'}</td><td><small class="text-muted">${d["OBS"] || '-'}</small></td>
+                </tr>`;
+            });
+
+            let tbodyBonus = document.querySelector('#table-bonus-sim tbody');
+            tbodyBonus.innerHTML = '';
+            data.filter(d => d.BonusRecalculated === "SIM").forEach(d => {
+                tbodyBonus.innerHTML += `<tr><td><strong>${d.Colaborador}</strong></td><td>${d.Setor}</td><td>${d.Equipe}</td><td>${d.Funcao}</td><td>${d["DDS"] || 'SIM'}</td><td><strong>R$ ${d.ValorBonus.toFixed(2)}</strong></td></tr>`;
+            });
+
+            let tbodyFaltas = document.querySelector('#table-faltas-aba tbody');
+            tbodyFaltas.innerHTML = '';
+            data.filter(d => d.FaltasNum > 0).forEach(d => {
+                tbodyFaltas.innerHTML += `<tr><td><strong>${d.Colaborador}</strong></td><td>${d.Setor}</td><td>${d.Equipe}</td><td>${d.Funcao}</td><td class="text-danger fw-bold">${d.FaltasNum}</td></tr>`;
+            });
+
+            let tbodyAtrasos = document.querySelector('#table-atrasos-aba tbody');
+            tbodyAtrasos.innerHTML = '';
+            data.filter(d => d.AtrasosNum > 0).forEach(d => {
+                tbodyAtrasos.innerHTML += `<tr><td><strong>${d.Colaborador}</strong></td><td>${d.Setor}</td><td>${d.Equipe}</td><td>${d.Funcao}</td><td class="text-warning fw-bold">${d["Atraso "]}</td></tr>`;
+            });
+
+            let tbodyAtestados = document.querySelector('#table-atestados-aba tbody');
+            tbodyAtestados.innerHTML = '';
+            data.filter(d => d.AtestadosNum > 0).forEach(d => {
+                tbodyAtestados.innerHTML += `<tr><td><strong>${d.Colaborador}</strong></td><td>${d.Setor}</td><td>${d.Equipe}</td><td>${d.Funcao}</td><td class="text-info fw-bold">${d["Atestado"]}</td></tr>`;
+            });
+
+            const dtConfig = { language: { url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/pt-BR.json' }, pageLength: 10, retrieve: true };
+            tables.geral = $('#table-geral').DataTable(dtConfig);
+            tables.bonus = $('#table-bonus-sim').DataTable(dtConfig);
+            tables.faltas = $('#table-faltas-aba').DataTable(dtConfig);
+            tables.atrasos = $('#table-atrasos-aba').DataTable(dtConfig);
+            tables.atestados = $('#table-atestados-aba').DataTable(dtConfig);
+        }
+
+        function renderCharts(data, comBonus, emFerias, total) {
+            ['elegibilidade', 'ocorrencias', 'elegibilidadeExport', 'ocorrenciasExport', 'faltasSetor', 'faltasTopColab', 'atestadosSetor'].forEach(k => {
+                if (charts[k]) charts[k].destroy();
+            });
+
+            const semBonus = total - comBonus - emFerias;
+            const doughnutData = {
+                labels: ['Aptos (SIM)', 'Férias', 'Inaptos (NÃO)'],
+                datasets: [{ data: [comBonus, emFerias, semBonus >= 0 ? semBonus : 0], backgroundColor: ['#2e7d32', '#0288d1', '#d32f2f'] }]
+            };
+
+            charts.elegibilidade = new Chart(document.getElementById('chartElegibilidade').getContext('2d'), { type: 'doughnut', data: doughnutData, options: { responsive: true, maintainAspectRatio: false } });
+            charts.elegibilidadeExport = new Chart(document.getElementById('chartElegibilidadeExport').getContext('2d'), { type: 'doughnut', data: doughnutData, options: { responsive: true, maintainAspectRatio: false, animation: false } });
+
+            let setoresMap = {};
+            data.forEach(d => {
+                if (!setoresMap[d.Setor]) setoresMap[d.Setor] = { faltas: 0, atrasos: 0, atestados: 0 };
+                setoresMap[d.Setor].faltas += d.FaltasNum;
+                setoresMap[d.Setor].atrasos += d.AtrasosNum;
+                setoresMap[d.Setor].atestados += d.AtestadosNum;
+            });
+
+            const labelsSetores = Object.keys(setoresMap);
+            const barData = {
+                labels: labelsSetores,
+                datasets: [
+                    { label: 'Faltas', data: labelsSetores.map(l => setoresMap[l].faltas), backgroundColor: '#c62828' },
+                    { label: 'Atrasos', data: labelsSetores.map(l => setoresMap[l].atrasos), backgroundColor: '#f9a825' }
+                ]
+            };
+
+            charts.ocorrencias = new Chart(document.getElementById('chartSetoresOcorrencias').getContext('2d'), { type: 'bar', data: barData, options: { responsive: true, maintainAspectRatio: false } });
+            charts.ocorrenciasExport = new Chart(document.getElementById('chartSetoresOcorrenciasExport').getContext('2d'), { type: 'bar', data: barData, options: { responsive: true, maintainAspectRatio: false, animation: false } });
+
+            // 1. Gráfico de Faltas por Setor (Aba Exportação)
+            charts.faltasSetor = new Chart(document.getElementById('chartFaltasSetorExport').getContext('2d'), {
+                type: 'bar',
+                data: { labels: labelsSetores, datasets: [{ label: 'Qtd Faltas', data: labelsSetores.map(l => setoresMap[l].faltas), backgroundColor: '#d32f2f' }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false }
+            });
+
+            // 2. Gráfico Ranking Top 5 Colaboradores Ausentes
+            const topColabsFaltas = [...data].sort((a,b) => b.FaltasNum - a.FaltasNum).slice(0, 5).filter(d => d.FaltasNum > 0);
+            charts.faltasTopColab = new Chart(document.getElementById('chartFaltasTopColabExport').getContext('2d'), {
+                type: 'progressbar' || 'js' && 'poly' ? 'bar' : 'bar',
+                data: { labels: topColabsFaltas.map(c => c.Colaborador), datasets: [{ label: 'Faltas', data: topColabsFaltas.map(c => c.FaltasNum), backgroundColor: '#333333' }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false }
+            });
+
+            // 3. Gráfico de Atestados por Setor (Aba Exportação)
+            charts.atestadosSetor = new Chart(document.getElementById('chartAtestadosSetorExport').getContext('2d'), {
+                type: 'line',
+                data: { labels: labelsSetores, datasets: [{ label: 'Atestados Entregues', data: labelsSetores.map(l => setoresMap[l].atestados), borderColor: '#00b4d8', backgroundColor: 'rgba(0,180,216,0.1)', fill: true, tension: 0.2 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+        }
+
+        function updateSetorDetailView() {
+            const currentS = document.getElementById('setor-detalhe-select').value;
+            if (!currentS) return;
+
+            const sData = globalData.filter(d => d.Setor === currentS);
+            const container = document.getElementById('setor-detalhes-cards');
+
+            const total = sData.length;
+            const faltas = sData.reduce((acc, c) => acc + c.FaltasNum, 0);
+            const aptos = sData.filter(d => d.BonusRecalculated === "SIM").length;
+            const totalFinanceiroSetor = sData.reduce((acc, c) => acc + c.ValorBonus, 0);
+
+            container.innerHTML = `
+                <div class="col-md-3"><div class="p-3 bg-body rounded shadow-sm text-center border-top border-primary border-3"><span class="text-muted text-uppercase fw-bold small">Total do Setor</span><h4 class="mb-0 fw-bold mt-1">${total} Colabs</h4></div></div>
+                <div class="col-md-3"><div class="p-3 bg-body rounded shadow-sm text-center border-top border-danger border-3"><span class="text-muted text-uppercase fw-bold small">Faltas no Setor</span><h4 class="mb-0 text-danger fw-bold mt-1">${faltas}</h4></div></div>
+                <div class="col-md-3"><div class="p-3 bg-body rounded shadow-sm text-center border-top border-success border-3"><span class="text-muted text-uppercase fw-bold small">Aproveitamento</span><h4 class="mb-0 text-success fw-bold mt-1">${total > 0 ? ((aptos/total)*100).toFixed(1) : 0}%</h4></div></div>
+                <div class="col-md-3"><div class="p-3 bg-body rounded shadow-sm text-center border-top border-warning border-3"><span class="text-muted text-uppercase fw-bold small">Total Injetado</span><h4 class="mb-0 text-warning fw-bold mt-1">${totalFinanceiroSetor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h4></div></div>
+            `;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            let dataCache = localStorage.getItem('premazon_v3_cache');
+            if(dataCache) {
+                globalData = JSON.parse(dataCache);
+                initFiltersAndViews();
+            }
+        });
+    </script>
+</body>
+</html>
