@@ -1,0 +1,28 @@
+# Dependências
+node_modules/
+
+# Compilação Next.js
+.next/
+out/
+dist/
+build/
+
+# Variáveis e segredos
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs e testes
+*.log
+coverage/
+
+# Sistemas e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Backups
+*.bak
