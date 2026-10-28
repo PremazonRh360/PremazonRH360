@@ -11,30 +11,47 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError("");
 
-    if (!isSupabaseConfigured) {
-      setError("Configure as variáveis do Supabase antes de acessar o sistema.");
-      return;
-    }
+  if (!isSupabaseConfigured) {
+    setError("Configure as variáveis do Supabase antes de acessar o sistema.");
+    return;
+  }
 
-    setIsLoading(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+  setIsLoading(true);
+
+  try {
+    const { data, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
     if (authError) {
-      setError("E-mail ou senha inválidos.");
-      setIsLoading(false);
+      setError("Não foi possível entrar. Verifique seu e-mail e senha.");
       return;
     }
 
-    router.push("/dashboard");
+    if (!data.session || !data.user) {
+      setError("Login sem sessão válida. Tente novamente.");
+      return;
+    }
+
+    router.replace("/dashboard");
     router.refresh();
-  };
+  } catch (err) {
+    console.error("Erro durante o login:", err);
+    setError(
+      "Ocorreu um erro ao entrar no sistema. Tente novamente."
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
